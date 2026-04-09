@@ -33,3 +33,9 @@ class Version:
         self.assets = []
         for asset in version['images']:
             self.assets.append(Asset(self, asset))
+
+    def add_asset(self, asset:dict):
+        '''
+        Add an image asset to this version.
+        '''
+        self.assets.append(Asset(self, asset))

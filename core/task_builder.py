@@ -18,7 +18,7 @@ class TaskBuilder:
     '''
     Class to process the model data and download files from CivitAI.
     '''
-    def __init__(self, output_dir:str, token:str, max_tries:int, retry_delay:int, only_base_models:list[str], only_model_file_types:list[str], skip_compress_models:bool):
+    def __init__(self, output_dir:str, token:str, max_tries:int, retry_delay:int, only_base_models:list[str], only_model_file_types:list[str], skip_compress_models:bool, max_gallery_images_per_model:int=20):
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
@@ -27,6 +27,7 @@ class TaskBuilder:
         self.max_tries = max_tries
         self.retry_delay = retry_delay
         self.skip_compress_models = skip_compress_models
+        self.max_gallery_images_per_model = max_gallery_images_per_model
 
         if only_base_models is not None:
             self.only_base_models = [s.upper() for s in only_base_models]
@@ -140,7 +141,10 @@ class TaskBuilder:
                 for asset in version.assets:
                     downloaded_output_path = os.path.join(self.output_dir, asset.output_path, asset.name)
                     temp_output_path       = os.path.join(self.output_dir, asset.output_path, f'{asset.name}.tmp')
+                    metadata_output_path   = os.path.join(self.output_dir, asset.output_path, f'{Path(asset.name).stem}.json')
                     if not os.path.exists(downloaded_output_path):
                         tasks.append(DownloadFileTask(asset.url, temp_output_path, downloaded_output_path, self.token, self.retry_delay, self.max_tries))
+                    if not os.path.exists(metadata_output_path):
+                        tasks.append(WriteMetadataTask(metadata_output_path, asset.metadata))
 
         return tasks

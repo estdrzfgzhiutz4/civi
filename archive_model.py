@@ -110,6 +110,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do **not** 7‑zip .safetensors after verification.",
     )
+    p.add_argument(
+        "--max-gallery-images-per-model",
+        type=int,
+        default=20,
+        help="Maximum gallery/example images to download per model.",
+    )
     return p
 
 
@@ -169,7 +175,11 @@ def main() -> None:
     extractor = MetadataExtractor(
         token=args.token, max_tries=args.max_tries, retry_delay=args.retry_delay
     )
-    models = extractor.extract(usernames=args.usernames, model_ids=model_ids)
+    models = extractor.extract(
+        usernames=args.usernames,
+        model_ids=model_ids,
+        max_gallery_images_per_model=args.max_gallery_images_per_model,
+    )
 
     if not models:
         logger.error("No models found; exiting.")
@@ -183,6 +193,7 @@ def main() -> None:
         only_base_models=args.only_base_models,
         only_model_file_types=args.only_model_file_types,
         skip_compress_models=args.skip_compress_models,
+        max_gallery_images_per_model=args.max_gallery_images_per_model,
     )
 
     tasks = task_builder.build_tasks(models)

@@ -1,4 +1,5 @@
 from pathlib import Path
+import urllib.parse
 
 class Asset:
     '''
@@ -13,14 +14,18 @@ class Asset:
 
         self.url = asset.get('url', '')
         self.type = asset.get('type', 'Unknown')
+        self.metadata = asset.get('meta', {})
+        self.id = str(asset.get('id', ''))
+        self.model_version_id = str(asset.get('modelVersionId', ''))
 
         if self.url != '':
-            path = Path(self.url)
-            self.id = path.stem
+            parsed = urllib.parse.urlparse(self.url)
+            path = Path(parsed.path)
+            if self.id == '':
+                self.id = path.stem
             self.extension = path.suffix
             self.name = path.name
         else:
-            self.id = ''
             self.extension = ''
             self.name = ''
 

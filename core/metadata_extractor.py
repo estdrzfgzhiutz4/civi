@@ -19,7 +19,7 @@ class MetadataExtractor:
         self.retry_delay = retry_delay
 
 
-    def extract(self, usernames:list=None, model_ids:list=None) -> dict[str, Model]:
+    def extract(self, usernames:list=None, model_ids:list=None, max_gallery_images_per_model:int=20) -> dict[str, Model]:
         '''
         Extract all models for a given user or model ID.
         '''
@@ -37,6 +37,11 @@ class MetadataExtractor:
                     model_data = self.__extract_model(m)
                     if model_data is not None:
                         result[m] = model_data
+
+        # Enrich each resolved model with up to N gallery images that include per-image metadata.
+        if max_gallery_images_per_model is not None and max_gallery_images_per_model > 0:
+            for model in result.values():
+                self.__attach_gallery_images(model, max_gallery_images_per_model)
 
         return result
 
@@ -90,3 +95,54 @@ class MetadataExtractor:
             return None   
         else:
             return Model(data)
+
+    def __extract_gallery_images(self, model_id:str, max_images:int) -> list[dict]:
+        '''
+        Extract up to max_images gallery images for a model.
+        '''
+        images = []
+        query_string = urllib.parse.urlencode(
+            {"modelId": model_id, "limit": min(max_images, 200), "nsfw": "true"}
+        )
+        page = f"https://civitai.com/api/v1/images?{query_string}"
+
+        while page and len(images) < max_images:
+            data = Tools.get_json_with_retry(
+                self.logger, page, self.token, self.retry_delay, self.max_tries
+            )
+            if not data:
+                break
+
+            for image in data.get("items", []):
+                images.append(image)
+                if len(images) >= max_images:
+                    break
+
+            page = data.get("metadata", {}).get("nextPage")
+            if page and len(images) < max_images:
+                time.sleep(1)
+
+        return images
+
+    def __attach_gallery_images(self, model:Model, max_images:int) -> None:
+        '''
+        Attach gallery images to each version for a model.
+        '''
+        images = self.__extract_gallery_images(str(model.id), max_images)
+        if not images:
+            return
+
+        version_lookup = {str(version.id): version for version in model.versions}
+        counts: dict[str, int] = {}
+
+        for image in images:
+            version_id = str(image.get("modelVersionId", ""))
+            if version_id == "" or version_id not in version_lookup:
+                continue
+
+            current_count = counts.get(version_id, 0)
+            if current_count >= max_images:
+                continue
+
+            version_lookup[version_id].add_asset(image)
+            counts[version_id] = current_count + 1
