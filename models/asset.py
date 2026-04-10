@@ -12,6 +12,7 @@ class Asset:
         '''
         self.version = version
         self.raw = asset
+        self.source = asset.get('_source', 'preview')
 
         self.url = asset.get('url', '')
         self.type = asset.get('type', 'Unknown')

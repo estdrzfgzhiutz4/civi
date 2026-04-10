@@ -139,15 +139,20 @@ class TaskBuilder:
                             ], name=f'Download, Verify and Compress'))
 
                 for asset in version.assets:
-                    downloaded_output_path = os.path.join(self.output_dir, asset.output_path, asset.name)
-                    temp_output_path       = os.path.join(self.output_dir, asset.output_path, f'{asset.name}.tmp')
-                    metadata_output_path   = os.path.join(self.output_dir, asset.output_path, f'{Path(asset.name).stem}.json')
+                    asset_output_path      = asset.output_path
+                    if asset.source == "gallery":
+                        asset_output_path = os.path.join(asset_output_path, "gallery")
+
+                    downloaded_output_path = os.path.join(self.output_dir, asset_output_path, asset.name)
+                    temp_output_path       = os.path.join(self.output_dir, asset_output_path, f'{asset.name}.tmp')
+                    metadata_output_path   = os.path.join(self.output_dir, asset_output_path, f'{Path(asset.name).stem}.json')
                     if not os.path.exists(downloaded_output_path):
                         tasks.append(DownloadFileTask(asset.url, temp_output_path, downloaded_output_path, self.token, self.retry_delay, self.max_tries))
                     if not os.path.exists(metadata_output_path):
                         tasks.append(WriteMetadataTask(metadata_output_path, {
                             "imageId": asset.id,
                             "modelVersionId": asset.model_version_id,
+                            "source": asset.source,
                             "url": asset.url,
                             "type": asset.type,
                             "meta": asset.metadata,

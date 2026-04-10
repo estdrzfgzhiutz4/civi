@@ -193,7 +193,9 @@ class MetadataExtractor:
             if current_count >= max_images:
                 continue
 
-            version_lookup[selected_version_id].add_asset(image)
+            image_with_source = dict(image)
+            image_with_source["_source"] = "gallery"
+            version_lookup[selected_version_id].add_asset(image_with_source)
             counts[selected_version_id] = current_count + 1
             if image_id != "":
                 attached_image_ids.add(image_id)
