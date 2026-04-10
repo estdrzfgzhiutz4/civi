@@ -174,6 +174,12 @@ class MetadataExtractor:
                     candidate_version_ids.add(str(image.get("modelVersionId")))
                 if isinstance(image.get("modelVersionIds"), list):
                     candidate_version_ids.update(str(v) for v in image.get("modelVersionIds"))
+                meta = image.get("meta") or {}
+                resources = meta.get("resources") or meta.get("civitaiResources") or []
+                if isinstance(resources, list):
+                    for resource in resources:
+                        if isinstance(resource, dict) and resource.get("modelVersionId") is not None:
+                            candidate_version_ids.add(str(resource.get("modelVersionId")))
 
                 if version_id not in candidate_version_ids:
                     continue
@@ -187,3 +193,10 @@ class MetadataExtractor:
                     seen.add(image_id)
                 if attached >= max_images:
                     break
+
+        self.logger.info(
+            "Attached %d gallery image(s) from feed for model %s (%s).",
+            attached,
+            model.id,
+            model.name,
+        )
