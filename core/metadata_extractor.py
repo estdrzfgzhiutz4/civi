@@ -108,23 +108,24 @@ class MetadataExtractor:
         else:
             return Model(data)
 
-    def __fetch_gallery_feed(self, model_id:str, max_images:int) -> list[dict]:
+    def __fetch_gallery_feed(self, model_version_id:str, page_size:int=100, max_pages:int=5) -> list[dict]:
         '''
-        Fetch image feed entries for a model and return up to max_images matching items.
+        Fetch image feed entries for a specific model version.
         '''
         images = []
         query_string = urllib.parse.urlencode(
             {
-                "modelId": model_id,
-                "limit": min(max_images * 3, 200),
+                "modelVersionId": model_version_id,
+                "limit": min(page_size, 200),
                 "sort": "Newest",
                 "period": "AllTime",
                 "nsfw": "true",
             }
         )
         page = f"https://civitai.com/api/v1/images?{query_string}"
+        page_count = 0
 
-        while page and len(images) < max_images:
+        while page and page_count < max_pages:
             data = Tools.get_json_with_retry(
                 self.logger,
                 page,
@@ -140,8 +141,9 @@ class MetadataExtractor:
                 break
 
             images.extend(items)
+            page_count += 1
             page = data.get("metadata", {}).get("nextPage")
-            if page and len(images) < max_images:
+            if page and page_count < max_pages:
                 time.sleep(1)
 
         return images
@@ -150,41 +152,38 @@ class MetadataExtractor:
         '''
         Attach gallery images from /images feed while filtering strictly to this model/version.
         '''
-        version_ids = {str(v.id) for v in model.versions}
         version_lookup = {str(v.id): v for v in model.versions}
         attached = 0
         seen: set[str] = set()
 
-        for image in self.__fetch_gallery_feed(str(model.id), max_images):
-            image_id = str(image.get("id", ""))
-            if image_id and image_id in seen:
-                continue
-
-            candidate_version_ids = set()
-
-            if image.get("modelVersionId") is not None:
-                candidate_version_ids.add(str(image.get("modelVersionId")))
-            if isinstance(image.get("modelVersionIds"), list):
-                candidate_version_ids.update(str(v) for v in image.get("modelVersionIds"))
-
-            meta = image.get("meta") or {}
-            resources = meta.get("resources") or meta.get("civitaiResources") or []
-            if isinstance(resources, list):
-                for res in resources:
-                    if isinstance(res, dict) and res.get("modelVersionId") is not None:
-                        candidate_version_ids.add(str(res.get("modelVersionId")))
-
-            matching_version_ids = [v for v in candidate_version_ids if v in version_ids]
-            if not matching_version_ids:
-                continue
-
-            version = version_lookup[matching_version_ids[0]]
-            image_with_source = dict(image)
-            image_with_source["_source"] = "gallery"
-            version.add_asset(image_with_source)
-            attached += 1
-
-            if image_id:
-                seen.add(image_id)
+        for version in model.versions:
             if attached >= max_images:
                 break
+
+            version_id = str(version.id)
+            images = self.__fetch_gallery_feed(version_id)
+
+            for image in images:
+                image_id = str(image.get("id", ""))
+                if image_id and image_id in seen:
+                    continue
+
+                # Strictly keep only images that mention this version in canonical fields.
+                candidate_version_ids = set()
+                if image.get("modelVersionId") is not None:
+                    candidate_version_ids.add(str(image.get("modelVersionId")))
+                if isinstance(image.get("modelVersionIds"), list):
+                    candidate_version_ids.update(str(v) for v in image.get("modelVersionIds"))
+
+                if version_id not in candidate_version_ids:
+                    continue
+
+                image_with_source = dict(image)
+                image_with_source["_source"] = "gallery"
+                version_lookup[version_id].add_asset(image_with_source)
+                attached += 1
+
+                if image_id:
+                    seen.add(image_id)
+                if attached >= max_images:
+                    break
