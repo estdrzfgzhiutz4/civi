@@ -149,16 +149,51 @@ class MetadataExtractor:
             return
 
         version_lookup = {str(version.id): version for version in model.versions}
+        if not version_lookup:
+            return
+
         counts: dict[str, int] = {}
+        attached_image_ids: set[str] = set()
 
         for image in images:
-            version_id = str(image.get("modelVersionId", ""))
-            if version_id == "" or version_id not in version_lookup:
+            image_id = str(image.get("id", ""))
+            if image_id != "" and image_id in attached_image_ids:
                 continue
 
-            current_count = counts.get(version_id, 0)
+            candidate_version_ids: list[str] = []
+
+            # Most common payload shape.
+            if image.get("modelVersionId") is not None:
+                candidate_version_ids.append(str(image.get("modelVersionId")))
+
+            # Alternative payload shape used by some image endpoints.
+            if isinstance(image.get("modelVersionIds"), list):
+                candidate_version_ids.extend(str(v) for v in image.get("modelVersionIds"))
+
+            # Fallback shape where model versions are nested objects.
+            if isinstance(image.get("modelVersions"), list):
+                for item in image.get("modelVersions"):
+                    if isinstance(item, dict) and item.get("id") is not None:
+                        candidate_version_ids.append(str(item.get("id")))
+
+            # Keep order, remove empties/duplicates.
+            candidate_version_ids = [v for i, v in enumerate(candidate_version_ids) if v and v not in candidate_version_ids[:i]]
+
+            selected_version_id = None
+            for version_id in candidate_version_ids:
+                if version_id in version_lookup:
+                    selected_version_id = version_id
+                    break
+
+            # If no version mapping was supplied by API, attach to the first version so the image is still archived.
+            if selected_version_id is None:
+                selected_version_id = str(model.versions[0].id)
+
+            current_count = counts.get(selected_version_id, 0)
             if current_count >= max_images:
                 continue
 
-            version_lookup[version_id].add_asset(image)
-            counts[version_id] = current_count + 1
+            version_lookup[selected_version_id].add_asset(image)
+            counts[selected_version_id] = current_count + 1
+            if image_id != "":
+                attached_image_ids.add(image_id)
