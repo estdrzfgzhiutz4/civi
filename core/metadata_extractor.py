@@ -38,10 +38,10 @@ class MetadataExtractor:
                     if model_data is not None:
                         result[m] = model_data
 
-        # Enrich each resolved model with up to N gallery images that include per-image metadata.
+        # Attach up to N community gallery images from the images feed.
         if max_gallery_images_per_model is not None and max_gallery_images_per_model > 0:
             for model in result.values():
-                self.__attach_gallery_images(model, max_gallery_images_per_model)
+                self.__attach_gallery_images_from_feed(model, max_gallery_images_per_model)
 
         return result
 
@@ -108,13 +108,19 @@ class MetadataExtractor:
         else:
             return Model(data)
 
-    def __extract_gallery_images_for_version(self, version_id:str, max_images:int) -> list[dict]:
+    def __fetch_gallery_feed(self, model_id:str, max_images:int) -> list[dict]:
         '''
-        Extract up to max_images gallery images for a specific model version.
+        Fetch image feed entries for a model and return up to max_images matching items.
         '''
         images = []
         query_string = urllib.parse.urlencode(
-            {"modelVersionId": version_id, "limit": min(max_images, 200), "nsfw": "true"}
+            {
+                "modelId": model_id,
+                "limit": min(max_images * 3, 200),
+                "sort": "Newest",
+                "period": "AllTime",
+                "nsfw": "true",
+            }
         )
         page = f"https://civitai.com/api/v1/images?{query_string}"
 
@@ -129,46 +135,56 @@ class MetadataExtractor:
             if not data:
                 break
 
-            for image in data.get("items", []):
-                images.append(image)
-                if len(images) >= max_images:
-                    break
+            items = data.get("items", [])
+            if not items:
+                break
 
+            images.extend(items)
             page = data.get("metadata", {}).get("nextPage")
             if page and len(images) < max_images:
                 time.sleep(1)
 
         return images
 
-    def __attach_gallery_images(self, model:Model, max_images:int) -> None:
+    def __attach_gallery_images_from_feed(self, model:Model, max_images:int) -> None:
         '''
-        Attach gallery images to each version for a model.
+        Attach gallery images from /images feed while filtering strictly to this model/version.
         '''
-        if not model.versions:
-            return
+        version_ids = {str(v.id) for v in model.versions}
+        version_lookup = {str(v.id): v for v in model.versions}
+        attached = 0
+        seen: set[str] = set()
 
-        total_attached = 0
-        attached_image_ids: set[str] = set()
+        for image in self.__fetch_gallery_feed(str(model.id), max_images):
+            image_id = str(image.get("id", ""))
+            if image_id and image_id in seen:
+                continue
 
-        for version in model.versions:
-            if total_attached >= max_images:
+            candidate_version_ids = set()
+
+            if image.get("modelVersionId") is not None:
+                candidate_version_ids.add(str(image.get("modelVersionId")))
+            if isinstance(image.get("modelVersionIds"), list):
+                candidate_version_ids.update(str(v) for v in image.get("modelVersionIds"))
+
+            meta = image.get("meta") or {}
+            resources = meta.get("resources") or meta.get("civitaiResources") or []
+            if isinstance(resources, list):
+                for res in resources:
+                    if isinstance(res, dict) and res.get("modelVersionId") is not None:
+                        candidate_version_ids.add(str(res.get("modelVersionId")))
+
+            matching_version_ids = [v for v in candidate_version_ids if v in version_ids]
+            if not matching_version_ids:
+                continue
+
+            version = version_lookup[matching_version_ids[0]]
+            image_with_source = dict(image)
+            image_with_source["_source"] = "gallery"
+            version.add_asset(image_with_source)
+            attached += 1
+
+            if image_id:
+                seen.add(image_id)
+            if attached >= max_images:
                 break
-
-            remaining = max_images - total_attached
-            images = self.__extract_gallery_images_for_version(str(version.id), remaining)
-
-            for image in images:
-                image_id = str(image.get("id", ""))
-                if image_id != "" and image_id in attached_image_ids:
-                    continue
-
-                image_with_source = dict(image)
-                image_with_source["_source"] = "gallery"
-                version.add_asset(image_with_source)
-                total_attached += 1
-
-                if image_id != "":
-                    attached_image_ids.add(image_id)
-
-                if total_attached >= max_images:
-                    break
