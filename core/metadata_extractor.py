@@ -108,13 +108,13 @@ class MetadataExtractor:
         else:
             return Model(data)
 
-    def __extract_gallery_images(self, model_id:str, max_images:int) -> list[dict]:
+    def __extract_gallery_images_for_version(self, version_id:str, max_images:int) -> list[dict]:
         '''
-        Extract up to max_images gallery images for a model.
+        Extract up to max_images gallery images for a specific model version.
         '''
         images = []
         query_string = urllib.parse.urlencode(
-            {"modelId": model_id, "limit": min(max_images, 200), "nsfw": "true"}
+            {"modelVersionId": version_id, "limit": min(max_images, 200), "nsfw": "true"}
         )
         page = f"https://civitai.com/api/v1/images?{query_string}"
 
@@ -144,58 +144,31 @@ class MetadataExtractor:
         '''
         Attach gallery images to each version for a model.
         '''
-        images = self.__extract_gallery_images(str(model.id), max_images)
-        if not images:
+        if not model.versions:
             return
 
-        version_lookup = {str(version.id): version for version in model.versions}
-        if not version_lookup:
-            return
-
-        counts: dict[str, int] = {}
+        total_attached = 0
         attached_image_ids: set[str] = set()
 
-        for image in images:
-            image_id = str(image.get("id", ""))
-            if image_id != "" and image_id in attached_image_ids:
-                continue
+        for version in model.versions:
+            if total_attached >= max_images:
+                break
 
-            candidate_version_ids: list[str] = []
+            remaining = max_images - total_attached
+            images = self.__extract_gallery_images_for_version(str(version.id), remaining)
 
-            # Most common payload shape.
-            if image.get("modelVersionId") is not None:
-                candidate_version_ids.append(str(image.get("modelVersionId")))
+            for image in images:
+                image_id = str(image.get("id", ""))
+                if image_id != "" and image_id in attached_image_ids:
+                    continue
 
-            # Alternative payload shape used by some image endpoints.
-            if isinstance(image.get("modelVersionIds"), list):
-                candidate_version_ids.extend(str(v) for v in image.get("modelVersionIds"))
+                image_with_source = dict(image)
+                image_with_source["_source"] = "gallery"
+                version.add_asset(image_with_source)
+                total_attached += 1
 
-            # Fallback shape where model versions are nested objects.
-            if isinstance(image.get("modelVersions"), list):
-                for item in image.get("modelVersions"):
-                    if isinstance(item, dict) and item.get("id") is not None:
-                        candidate_version_ids.append(str(item.get("id")))
+                if image_id != "":
+                    attached_image_ids.add(image_id)
 
-            # Keep order, remove empties/duplicates.
-            candidate_version_ids = [v for i, v in enumerate(candidate_version_ids) if v and v not in candidate_version_ids[:i]]
-
-            selected_version_id = None
-            for version_id in candidate_version_ids:
-                if version_id in version_lookup:
-                    selected_version_id = version_id
+                if total_attached >= max_images:
                     break
-
-            # If no version mapping was supplied by API, attach to the first version so the image is still archived.
-            if selected_version_id is None:
-                selected_version_id = str(model.versions[0].id)
-
-            current_count = counts.get(selected_version_id, 0)
-            if current_count >= max_images:
-                continue
-
-            image_with_source = dict(image)
-            image_with_source["_source"] = "gallery"
-            version_lookup[selected_version_id].add_asset(image_with_source)
-            counts[selected_version_id] = current_count + 1
-            if image_id != "":
-                attached_image_ids.add(image_id)
