@@ -145,6 +145,13 @@ class TaskBuilder:
                     if not os.path.exists(downloaded_output_path):
                         tasks.append(DownloadFileTask(asset.url, temp_output_path, downloaded_output_path, self.token, self.retry_delay, self.max_tries))
                     if not os.path.exists(metadata_output_path):
-                        tasks.append(WriteMetadataTask(metadata_output_path, asset.metadata))
+                        tasks.append(WriteMetadataTask(metadata_output_path, {
+                            "imageId": asset.id,
+                            "modelVersionId": asset.model_version_id,
+                            "url": asset.url,
+                            "type": asset.type,
+                            "meta": asset.metadata,
+                            "raw": asset.raw,
+                        }))
 
         return tasks

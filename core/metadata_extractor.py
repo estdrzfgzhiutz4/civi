@@ -60,7 +60,13 @@ class MetadataExtractor:
                 self.logger.info("End of pagination reached: 'next_page' is None.")
                 break
 
-            data = Tools.get_json_with_retry(self.logger, page, self.token, self.retry_delay, self.max_tries)
+            data = Tools.get_json_with_retry(
+                self.logger,
+                page,
+                self.token,
+                self.retry_delay,
+                max_retries=self.max_tries,
+            )
 
             if not data:
                 self.logger.warning(f"Fetching %s or %s return invalid result, skipped.", page, username)
@@ -86,7 +92,13 @@ class MetadataExtractor:
         Exctract all models for a model.
         '''
         query_string = urllib.parse.urlencode({ "nsfw": "true" })
-        data = Tools.get_json_with_retry(self.logger, f"{self.base_url}/{model_id}?{query_string}", self.token, self.retry_delay)
+        data = Tools.get_json_with_retry(
+            self.logger,
+            f"{self.base_url}/{model_id}?{query_string}",
+            self.token,
+            self.retry_delay,
+            max_retries=self.max_tries,
+        )
 
         time.sleep(2)  # Respect API rate limits
 
@@ -108,7 +120,11 @@ class MetadataExtractor:
 
         while page and len(images) < max_images:
             data = Tools.get_json_with_retry(
-                self.logger, page, self.token, self.retry_delay, self.max_tries
+                self.logger,
+                page,
+                self.token,
+                self.retry_delay,
+                max_retries=self.max_tries,
             )
             if not data:
                 break

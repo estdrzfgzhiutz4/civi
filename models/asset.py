@@ -11,10 +11,11 @@ class Asset:
         Initialize the model with url.
         '''
         self.version = version
+        self.raw = asset
 
         self.url = asset.get('url', '')
         self.type = asset.get('type', 'Unknown')
-        self.metadata = asset.get('meta', {})
+        self.metadata = asset.get('meta') or asset.get('metadata') or {}
         self.id = str(asset.get('id', ''))
         self.model_version_id = str(asset.get('modelVersionId', ''))
 
