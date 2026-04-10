@@ -141,7 +141,7 @@ class TaskBuilder:
                 for asset in version.assets:
                     asset_output_path      = asset.output_path
                     if asset.source == "gallery":
-                        asset_output_path = os.path.join(asset_output_path, "gallery")
+                        asset_output_path = os.path.join(version.model.output_path, "gallery")
 
                     downloaded_output_path = os.path.join(self.output_dir, asset_output_path, asset.name)
                     temp_output_path       = os.path.join(self.output_dir, asset_output_path, f'{asset.name}.tmp')

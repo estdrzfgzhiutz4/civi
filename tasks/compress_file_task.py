@@ -77,7 +77,13 @@ class CompressFileTask(BaseTask):
             return True
 
         except (Exception) as e:
-            self.logger.error("Compressing failed, removed partially compressed file: %s", self.output_path_and_file_name, type(e), e, stack_info=True, exc_info=True)
+            self.logger.error(
+                "Compressing failed, removed partially compressed file: %s (%s)",
+                self.output_path_and_file_name,
+                e,
+                stack_info=True,
+                exc_info=True,
+            )
             self.cleanup()
             return False
 

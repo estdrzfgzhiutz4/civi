@@ -28,6 +28,7 @@ class DownloadFileTask(BaseTask):
 
     def run(self):
         self.logger.debug('Downloading: %s to %s, Resuming? %s', self.url, self.output_path_and_file_name, os.path.exists(self.temp_output_path_and_file_name))
+        os.makedirs(os.path.dirname(self.temp_output_path_and_file_name), exist_ok=True)
 
         for r in range(self.max_retry):
             try:
@@ -91,7 +92,13 @@ class DownloadFileTask(BaseTask):
                 time.sleep(self.retry_delay)
 
             except (Exception) as e:
-                self.logger.error("Abnormal Error Occured downloading: %s", self.output_path_and_file_name, type(e), e, stack_info=True, exc_info=True)
+                self.logger.error(
+                    "Abnormal Error Occured downloading: %s (%s)",
+                    self.output_path_and_file_name,
+                    e,
+                    stack_info=True,
+                    exc_info=True,
+                )
                 return False
 
         self.logger.error("Failed to download file: %s, hit max retries.", self.url)
